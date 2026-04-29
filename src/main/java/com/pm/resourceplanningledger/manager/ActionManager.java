@@ -165,8 +165,8 @@ public class ActionManager {
     public void onImplement(ProposedAction action) {
         LocalDateTime now = LocalDateTime.now(clock);
         ImplementedAction impl = new ImplementedAction(action, now);
-        impl.setActualParty(action.getParty());
-        impl.setActualLocation(action.getLocation());
+        impl.setActualParty(null);
+        impl.setActualLocation(null);
         implementedActionRepository.save(impl);
         action.setImplementedAction(impl);
 
