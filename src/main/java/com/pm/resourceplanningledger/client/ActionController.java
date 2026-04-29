@@ -27,8 +27,15 @@ public class ActionController {
     }
 
     @PostMapping("/{id}/implement")
-    public ResponseEntity<Map<String, Object>> implement(@PathVariable Long id) {
-        ProposedAction action = actionManager.implement(id);
+    public ResponseEntity<Map<String, Object>> implement(@PathVariable Long id,
+                                                         @RequestBody(required = false) Map<String, String> body) {
+        String actualParty = null;
+        String actualLocation = null;
+        if (body != null) {
+            actualParty = body.get("actualParty");
+            actualLocation = body.get("actualLocation");
+        }
+        ProposedAction action = actionManager.implement(id, actualParty, actualLocation);
         return ResponseEntity.ok(toMap(action));
     }
 
@@ -76,7 +83,8 @@ public class ActionController {
     }
 
     @PutMapping("/{id}/implemented")
-    public ResponseEntity<Map<String, Object>> updateImplemented(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<Map<String, Object>> updateImplemented(@PathVariable Long id,
+                                                                 @RequestBody Map<String, String> body) {
         ProposedAction action = actionManager.updateImplementedAction(id,
                 body.get("actualParty"),
                 body.get("actualLocation"));
@@ -101,7 +109,7 @@ public class ActionController {
         }
         map.put("legalTransitions", legalTransitions);
 
-        // Allocations
+        // Allocations (F6 — includes assetId and timePeriod)
         List<Map<String, Object>> allocations = new ArrayList<>();
         for (var alloc : action.getAllocations()) {
             Map<String, Object> allocMap = new LinkedHashMap<>();
@@ -116,7 +124,7 @@ public class ActionController {
         }
         map.put("allocations", allocations);
 
-        // Implemented action diff
+        // Implemented action diff (F5)
         if (action.getImplementedAction() != null) {
             var impl = action.getImplementedAction();
             Map<String, Object> implMap = new LinkedHashMap<>();

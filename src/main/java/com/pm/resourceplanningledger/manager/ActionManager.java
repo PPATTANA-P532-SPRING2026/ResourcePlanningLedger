@@ -69,27 +69,34 @@ public class ActionManager {
     }
 
     @Transactional
-    public ProposedAction implement(Long actionId) {
+    public ProposedAction implement(Long actionId, String actualParty, String actualLocation) {
         ProposedAction action = findById(actionId);
         checkDependenciesSatisfied(action);
         ActionState currentState = stateMachine.resolve(action.getStateName());
         ActionContext ctx = new ActionContext(action, this);
         currentState.implement(ctx);
+
+        // After state transition, update the ImplementedAction with actual values if provided
+        ImplementedAction impl = action.getImplementedAction();
+        if (impl != null) {
+            if (actualParty != null && !actualParty.isEmpty()) {
+                impl.setActualParty(actualParty);
+            }
+            if (actualLocation != null && !actualLocation.isEmpty()) {
+                impl.setActualLocation(actualLocation);
+            }
+            implementedActionRepository.save(impl);
+        }
+
         return proposedActionRepository.save(action);
     }
 
-    /**
-     * Checks that all actions this action depends on are COMPLETED.
-     * Dependencies are stored as action names within the same plan.
-     * Throws IllegalStateException if any dependency is not yet completed.
-     */
     private void checkDependenciesSatisfied(ProposedAction action) {
         List<String> deps = action.getDependsOn();
         if (deps == null || deps.isEmpty()) {
             return;
         }
 
-        // Find sibling actions in the same plan
         Plan plan = action.getPlan();
         if (plan == null) {
             return;
@@ -172,14 +179,12 @@ public class ActionManager {
         Suspension suspension = new Suspension(action, reason, LocalDate.now(clock));
         suspensionRepository.save(suspension);
 
-        // Close any open suspensions when resuming later
         auditLogRepository.save(new AuditLogEntry(
                 "ACTION_SUSPENDED", null, null, action.getId(), now));
     }
 
     public void onResume(ProposedAction action) {
         LocalDateTime now = LocalDateTime.now(clock);
-        // Close the most recent open suspension
         List<Suspension> suspensions = action.getSuspensions();
         for (Suspension s : suspensions) {
             if (s.getEndDate() == null) {
@@ -205,8 +210,9 @@ public class ActionManager {
             if (!action.getAllocations().isEmpty()) {
                 Transaction tx = consumableLedgerEntryGenerator.generateEntries(impl);
 
-                // Set usage accounts for deposit entries
+                // Set usage accounts and actionId for all entries
                 for (Entry entry : tx.getEntries()) {
+                    entry.setActionId(action.getId());
                     if (entry.getAccount() == null) {
                         Account usageAccount = new Account(
                                 "Usage - " + action.getName(),

@@ -32,6 +32,7 @@ public class AccountController {
             map.put("amount", e.getAmount());
             map.put("chargedAt", e.getChargedAt());
             map.put("bookedAt", e.getBookedAt());
+            map.put("actionId", e.getActionId());
             if (e.getTransaction() != null) {
                 map.put("transactionId", e.getTransaction().getId());
                 map.put("transactionDescription", e.getTransaction().getDescription());

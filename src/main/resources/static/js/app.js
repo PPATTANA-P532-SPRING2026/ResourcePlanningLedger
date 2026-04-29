@@ -99,7 +99,6 @@ function createProtocol() {
     var name = document.getElementById("proto-name").value;
     var desc = document.getElementById("proto-desc").value;
     if (!name) { alert("Protocol name required"); return; }
-
     var steps = [];
     for (var i = 1; i <= stepCount; i++) {
         var sName = document.getElementById("step-name-" + i);
@@ -111,7 +110,6 @@ function createProtocol() {
             });
         }
     }
-
     api("POST", "/api/protocols", { name: name, description: desc, steps: steps }).then(function() {
         document.getElementById("proto-name").value = "";
         document.getElementById("proto-desc").value = "";
@@ -189,11 +187,9 @@ function renderTree(children, depth) {
         var child = children[i];
         var isAction = child.type === "ACTION";
         var html = '<div class="tree-node ' + (depth === 0 ? "root" : "") + '">';
-
         if (!isAction && child.children) {
             html += '<span class="tree-toggle open" onclick="toggleTreeNode(this)">';
         }
-
         if (isAction) {
             html += '<span class="node-label" style="cursor:pointer;" onclick="loadActionDetail(' + child.id + ')">';
         } else {
@@ -202,7 +198,6 @@ function renderTree(children, depth) {
         html += child.name + "</span>";
         html += '<span class="node-type ' + (isAction ? "action" : "plan") + '">' + child.type + "</span>";
         html += '<span class="status status-' + child.status + '" style="margin-left:8px;">' + child.status + "</span>";
-
         if (!isAction && child.children) {
             html += "</span>";
             html += '<div class="tree-children">' + renderTree(child.children, depth + 1) + "</div>";
@@ -248,16 +243,18 @@ function loadActionDetail(actionId) {
         html += '<button class="btn btn-secondary btn-sm" onclick="openAllocModal(' + actionId + ')">+ Allocation</button>';
         html += "</div>";
 
+        // F6: Allocations with assetId and timePeriod
         if (action.allocations.length > 0) {
             html += "<h3>Resource Allocations</h3>";
-            html += "<table><thead><tr><th>Resource</th><th>Qty</th><th>Kind</th><th>Asset</th></tr></thead><tbody>";
+            html += "<table><thead><tr><th>Resource</th><th>Qty</th><th>Kind</th><th>Asset ID</th><th>Time Period</th></tr></thead><tbody>";
             for (var i = 0; i < action.allocations.length; i++) {
                 var a = action.allocations[i];
-                html += "<tr><td>" + a.resourceTypeName + "</td><td>" + a.quantity + "</td><td>" + a.kind + "</td><td>" + (a.assetId || "-") + "</td></tr>";
+                html += "<tr><td>" + a.resourceTypeName + "</td><td>" + a.quantity + "</td><td>" + a.kind + "</td><td>" + (a.assetId || "-") + "</td><td>" + (a.timePeriod || "-") + "</td></tr>";
             }
             html += "</tbody></table>";
         }
 
+        // F5: Implemented action diff
         if (action.implementedAction) {
             var impl = action.implementedAction;
             html += "<h3>Implementation Details (Plan vs Reality)</h3>";
@@ -267,8 +264,18 @@ function loadActionDetail(actionId) {
             html += "<tr><td>Start</td><td>-</td><td>" + (impl.actualStart || "-") + "</td></tr>";
             html += "<tr><td>Status</td><td>" + action.state + "</td><td>" + impl.status + "</td></tr>";
             html += "</tbody></table>";
+
+            if (impl.diff && Object.keys(impl.diff).length > 0) {
+                html += '<p style="color:#c62828; font-weight:600; margin-top:8px;">Differences detected:</p>';
+                var diffKeys = Object.keys(impl.diff);
+                for (var d = 0; d < diffKeys.length; d++) {
+                    var field = diffKeys[d];
+                    html += '<p style="margin-left:12px;">' + field + ': <span style="background:#ffebee; padding:2px 6px;">' + impl.diff[field].proposed + '</span> changed to <span style="background:#e8f5e9; padding:2px 6px;">' + impl.diff[field].actual + "</span></p>";
+                }
+            }
         }
 
+        // Suspensions
         if (action.suspensions.length > 0) {
             html += "<h3>Suspensions</h3>";
             html += "<table><thead><tr><th>Reason</th><th>Start</th><th>End</th></tr></thead><tbody>";
@@ -354,14 +361,25 @@ function addActionToPlan() {
     });
 }
 
+// F10: Report with allocated quantities per resource type
 function openReportModal() {
     api("GET", "/api/plans/" + currentPlanId + "/report").then(function(report) {
-        var html = "<table><thead><tr><th>Type</th><th>Name</th><th>Status</th></tr></thead><tbody>";
+        var html = "<table><thead><tr><th>Type</th><th>Name</th><th>Status</th><th>Allocated Resources</th></tr></thead><tbody>";
         for (var i = 0; i < report.length; i++) {
             var node = report[i];
+            var allocStr = "-";
+            if (node.allocatedQuantities && Object.keys(node.allocatedQuantities).length > 0) {
+                var parts = [];
+                var keys = Object.keys(node.allocatedQuantities);
+                for (var j = 0; j < keys.length; j++) {
+                    parts.push(keys[j] + ": " + node.allocatedQuantities[keys[j]]);
+                }
+                allocStr = parts.join(", ");
+            }
             html += "<tr><td><span class='node-type " + (node.type === "ACTION" ? "action" : "plan") + "'>" + node.type + "</span></td>" +
                 "<td>" + node.name + "</td>" +
-                "<td><span class='status status-" + node.status + "'>" + node.status + "</span></td></tr>";
+                "<td><span class='status status-" + node.status + "'>" + node.status + "</span></td>" +
+                "<td>" + allocStr + "</td></tr>";
         }
         html += "</tbody></table>";
         document.getElementById("report-content").innerHTML = html;
@@ -369,6 +387,7 @@ function openReportModal() {
     });
 }
 
+// F9: Ledger with originating action ID
 function loadLedger() {
     api("GET", "/api/accounts").then(function(accounts) {
         document.getElementById("accounts-table").innerHTML =
@@ -395,9 +414,11 @@ function loadEntries(accountId, accountName) {
         document.getElementById("entries-table").innerHTML =
             entries.map(function(e) {
                 return "<tr><td>" + e.id + '</td><td class="' + (parseFloat(e.amount) < 0 ? "balance-alert" : "") + '">' + e.amount + "</td>" +
-                    "<td>" + (e.chargedAt || "-") + "</td><td>" + (e.bookedAt || "-") + "</td>" +
+                    "<td>" + (e.chargedAt || "-") + "</td>" +
+                    "<td>" + (e.bookedAt || "-") + "</td>" +
+                    "<td>" + (e.actionId || "-") + "</td>" +
                     "<td>" + (e.transactionDescription || "-") + "</td></tr>";
-            }).join("") || '<tr><td colspan="5" class="empty-state">No entries</td></tr>';
+            }).join("") || '<tr><td colspan="6" class="empty-state">No entries</td></tr>';
         document.getElementById("entries-section").style.display = "block";
     });
 }

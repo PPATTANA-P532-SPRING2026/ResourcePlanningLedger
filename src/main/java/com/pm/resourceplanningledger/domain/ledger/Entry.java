@@ -29,6 +29,9 @@ public class Entry {
     @Column(nullable = false)
     private LocalDateTime bookedAt;
 
+    @Column(name = "action_id")
+    private Long actionId;
+
     public Entry() {}
 
     public Entry(Account account, BigDecimal amount, LocalDateTime chargedAt, LocalDateTime bookedAt) {
@@ -38,7 +41,6 @@ public class Entry {
         this.bookedAt = bookedAt;
     }
 
-    // --- Getters and Setters ---
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -56,4 +58,7 @@ public class Entry {
 
     public LocalDateTime getBookedAt() { return bookedAt; }
     public void setBookedAt(LocalDateTime bookedAt) { this.bookedAt = bookedAt; }
+
+    public Long getActionId() { return actionId; }
+    public void setActionId(Long actionId) { this.actionId = actionId; }
 }
