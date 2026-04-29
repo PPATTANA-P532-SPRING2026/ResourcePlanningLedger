@@ -75,6 +75,14 @@ public class ActionController {
         return ResponseEntity.ok(result);
     }
 
+    @PutMapping("/{id}/implemented")
+    public ResponseEntity<Map<String, Object>> updateImplemented(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        ProposedAction action = actionManager.updateImplementedAction(id,
+                body.get("actualParty"),
+                body.get("actualLocation"));
+        return ResponseEntity.ok(toMap(action));
+    }
+
     private Map<String, Object> toMap(ProposedAction action) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", action.getId());

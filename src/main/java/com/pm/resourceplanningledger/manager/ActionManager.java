@@ -256,4 +256,20 @@ public class ActionManager {
         proposedActionRepository.save(action);
         return allocation;
     }
+
+    @Transactional
+    public ProposedAction updateImplementedAction(Long actionId, String actualParty, String actualLocation) {
+        ProposedAction action = findById(actionId);
+        ImplementedAction impl = implementedActionRepository.findByProposedActionId(actionId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Action " + actionId + " has not been implemented yet"));
+        if (actualParty != null) {
+            impl.setActualParty(actualParty);
+        }
+        if (actualLocation != null) {
+            impl.setActualLocation(actualLocation);
+        }
+        implementedActionRepository.save(impl);
+        return action;
+    }
 }
