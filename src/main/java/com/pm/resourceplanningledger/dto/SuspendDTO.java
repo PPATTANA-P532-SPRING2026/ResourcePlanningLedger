@@ -1,0 +1,8 @@
+package com.pm.resourceplanningledger.dto;
+
+public class SuspendDTO {
+    private String reason;
+
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+}
