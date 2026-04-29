@@ -71,10 +71,50 @@ public class ActionManager {
     @Transactional
     public ProposedAction implement(Long actionId) {
         ProposedAction action = findById(actionId);
+        checkDependenciesSatisfied(action);
         ActionState currentState = stateMachine.resolve(action.getStateName());
         ActionContext ctx = new ActionContext(action, this);
         currentState.implement(ctx);
         return proposedActionRepository.save(action);
+    }
+
+    /**
+     * Checks that all actions this action depends on are COMPLETED.
+     * Dependencies are stored as action names within the same plan.
+     * Throws IllegalStateException if any dependency is not yet completed.
+     */
+    private void checkDependenciesSatisfied(ProposedAction action) {
+        List<String> deps = action.getDependsOn();
+        if (deps == null || deps.isEmpty()) {
+            return;
+        }
+
+        // Find sibling actions in the same plan
+        Plan plan = action.getPlan();
+        if (plan == null) {
+            return;
+        }
+
+        for (String depName : deps) {
+            boolean found = false;
+            for (ProposedAction sibling : plan.getActions()) {
+                if (sibling.getName().equals(depName)) {
+                    found = true;
+                    if (!"COMPLETED".equals(sibling.getStateName())) {
+                        throw new IllegalStateException(
+                                "Cannot implement '" + action.getName() +
+                                        "': dependency '" + depName + "' is not completed (current state: " +
+                                        sibling.getStateName() + ")");
+                    }
+                    break;
+                }
+            }
+            if (!found) {
+                throw new IllegalStateException(
+                        "Cannot implement '" + action.getName() +
+                                "': dependency '" + depName + "' not found in plan");
+            }
+        }
     }
 
     @Transactional
