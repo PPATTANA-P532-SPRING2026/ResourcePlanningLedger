@@ -163,6 +163,9 @@ document.querySelectorAll(".modal-overlay").forEach(el => {
         if (e.target === this) this.classList.remove("show");
     });
 });
+function loadDashboard() {
+    console.log("Dashboard loaded");
+}
 
 // ================= INIT =================
 loadDashboard();
