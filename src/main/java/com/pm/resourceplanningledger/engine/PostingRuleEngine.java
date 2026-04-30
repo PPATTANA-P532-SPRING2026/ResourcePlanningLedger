@@ -55,6 +55,7 @@ public class PostingRuleEngine {
                     LocalDateTime now = LocalDateTime.now(clock);
 
                     Entry alertEntry = new Entry();
+                    alertEntry.setTransaction(transaction);
                     alertEntry.setAccount(rule.getOutputAccount());
 
                     // Use a simple positive alert signal (not the full negative balance)
