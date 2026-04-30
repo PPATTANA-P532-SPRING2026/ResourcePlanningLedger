@@ -6,6 +6,10 @@ public class ResourceTypeDTO {
     private String kind;  // ASSET or CONSUMABLE
     private String unit;
     private Long poolAccountId;
+    private Double initialBalance;
+
+    public Double getInitialBalance() { return initialBalance; }
+    public void setInitialBalance(Double initialBalance) { this.initialBalance = initialBalance; }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

@@ -77,10 +77,12 @@ function createResourceType() {
     var name = document.getElementById("rt-name").value;
     var kind = document.getElementById("rt-kind").value;
     var unit = document.getElementById("rt-unit").value;
+    var balance = parseFloat(document.getElementById("rt-balance").value) || 0;
     if (!name || !unit) { alert("Name and unit required"); return; }
-    api("POST", "/api/resource-types", { name: name, kind: kind, unit: unit }).then(function() {
+    api("POST", "/api/resource-types", { name: name, kind: kind, unit: unit, initialBalance: balance }).then(function() {
         document.getElementById("rt-name").value = "";
         document.getElementById("rt-unit").value = "";
+        document.getElementById("rt-balance").value = "";
         loadDashboard();
     });
 }
@@ -462,6 +464,53 @@ function confirmImplement() {
         if (currentPlanId) {
             loadPlanDetail(currentPlanId);
         }
+    });
+}
+
+function loadLedger() {
+    api("GET", "/api/accounts").then(function(accounts) {
+        document.getElementById("accounts-table").innerHTML =
+            accounts.map(function(a) {
+                var safeName = a.name.replace(/'/g, "\\'");
+                return "<tr><td>" + a.id + "</td><td>" + a.name + "</td><td>" + a.kind + "</td>" +
+                    "<td>" + (a.resourceTypeName || "-") + "</td>" +
+                    '<td class="' + (parseFloat(a.balance) < 0 ? "balance-alert" : "balance-ok") + '">' + a.balance + "</td>" +
+                    "<td><button class='btn btn-secondary btn-sm' onclick=\"loadEntries(" + a.id + ", '" + safeName + "')\">Entries</button></td></tr>";
+            }).join("") || '<tr><td colspan="6" class="empty-state">No accounts</td></tr>';
+
+        // Populate posting rule dropdowns
+        var poolAccounts = accounts.filter(function(a) { return a.kind === "POOL"; });
+        var alertAccounts = accounts.filter(function(a) { return a.kind === "ALERT_MEMO"; });
+
+        document.getElementById("rule-trigger").innerHTML =
+            poolAccounts.map(function(a) {
+                return '<option value="' + a.id + '">' + a.name + '</option>';
+            }).join("");
+
+        document.getElementById("rule-output").innerHTML =
+            alertAccounts.map(function(a) {
+                return '<option value="' + a.id + '">' + a.name + '</option>';
+            }).join("");
+
+        return api("GET", "/api/posting-rules");
+    }).then(function(rules) {
+        document.getElementById("posting-rules-table").innerHTML =
+            rules.map(function(r) {
+                return "<tr><td>" + r.triggerAccountName + "</td><td>" + r.outputAccountName + "</td><td>" + r.strategyType + "</td></tr>";
+            }).join("") || '<tr><td colspan="3" class="empty-state">No posting rules</td></tr>';
+    });
+}
+
+function createPostingRule() {
+    var triggerAccountId = parseInt(document.getElementById("rule-trigger").value);
+    var outputAccountId = parseInt(document.getElementById("rule-output").value);
+    if (!triggerAccountId || !outputAccountId) { alert("Select both accounts"); return; }
+    api("POST", "/api/posting-rules", {
+        triggerAccountId: triggerAccountId,
+        outputAccountId: outputAccountId,
+        strategyType: "OVER_CONSUMPTION_ALERT"
+    }).then(function() {
+        loadLedger();
     });
 }
 

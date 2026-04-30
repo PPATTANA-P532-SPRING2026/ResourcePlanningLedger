@@ -43,7 +43,8 @@ public class ResourceTypeController {
                 ResourceType.ResourceKind.valueOf(dto.getKind()),
                 dto.getUnit()
         );
-        ResourceType saved = resourceTypeManager.create(rt);
+        double initialBalance = dto.getInitialBalance() != null ? dto.getInitialBalance() : 0.0;
+        ResourceType saved = resourceTypeManager.create(rt, initialBalance);
         return ResponseEntity.ok(toMap(saved));
     }
 

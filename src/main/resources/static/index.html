@@ -53,6 +53,7 @@
                     </select>
                 </div>
                 <div class="form-group"><label>Unit</label><input id="rt-unit" placeholder="e.g. kg"></div>
+                <div class="form-group"><label>Initial Balance</label><input id="rt-balance" type="number" step="0.01" placeholder="e.g. 1000"></div>
                 <div class="form-group"><label>&nbsp;</label>
                     <button class="btn btn-primary" onclick="createResourceType()">Add</button>
                 </div>
@@ -136,6 +137,24 @@
         </div>
         <div class="card">
             <h2>Posting Rules</h2>
+            <!-- Add Posting Rule Form -->
+            <div class="card">
+                <h2>Add Posting Rule</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Trigger Account (Pool)</label>
+                        <select id="rule-trigger"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Output Account (Alert Memo)</label>
+                        <select id="rule-output"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <button class="btn btn-primary" onclick="createPostingRule()">Add Rule</button>
+                    </div>
+                </div>
+            </div>
             <table>
                 <thead><tr><th>Trigger Account</th><th>Output Account</th><th>Strategy</th></tr></thead>
                 <tbody id="posting-rules-table"></tbody>
