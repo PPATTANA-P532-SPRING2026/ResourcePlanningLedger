@@ -28,13 +28,14 @@ public class PostingRuleEngine {
 
     public void evaluate(Transaction transaction) {
 
-        // Collect new entries separately to avoid ConcurrentModificationException
+        // collect new entries separately to avoid modifying list while iterating
         List<Entry> newEntries = new ArrayList<>();
 
         for (Entry entry : transaction.getEntries()) {
+
             Account account = entry.getAccount();
 
-            // Only apply rules to pool accounts
+            // only apply to pool accounts
             if (account == null || account.getKind() != Account.AccountKind.POOL) {
                 continue;
             }
@@ -45,9 +46,10 @@ public class PostingRuleEngine {
 
                 BigDecimal balance = entryRepository.getAccountBalance(account.getId());
 
+                // trigger condition: pool goes below zero
                 if (balance != null && balance.compareTo(BigDecimal.ZERO) < 0) {
 
-                    // Safety check: ensure output account exists
+                    // safety check
                     if (rule.getOutputAccount() == null) {
                         continue;
                     }
@@ -55,28 +57,28 @@ public class PostingRuleEngine {
                     LocalDateTime now = LocalDateTime.now(clock);
 
                     Entry alertEntry = new Entry();
+
+                    // 🔥 CRITICAL: attach to transaction
                     alertEntry.setTransaction(transaction);
+
                     alertEntry.setAccount(rule.getOutputAccount());
 
-                    // Use a simple positive alert signal (not the full negative balance)
+                    // alert is a signal → not the full negative balance
                     alertEntry.setAmount(BigDecimal.ONE);
 
                     alertEntry.setChargedAt(now);
                     alertEntry.setBookedAt(now);
 
-                    // Link alert to the same action for traceability
+                    // link to originating action
                     alertEntry.setActionId(entry.getActionId());
 
-                    // Persist immediately
-                    entryRepository.save(alertEntry);
-
-                    // Add to transaction after loop
+                    // DO NOT save directly → let transaction persist it
                     newEntries.add(alertEntry);
                 }
             }
         }
 
-        // Add new entries after iteration (safe)
+        // add after iteration to avoid ConcurrentModificationException
         for (Entry e : newEntries) {
             transaction.addEntry(e);
         }
