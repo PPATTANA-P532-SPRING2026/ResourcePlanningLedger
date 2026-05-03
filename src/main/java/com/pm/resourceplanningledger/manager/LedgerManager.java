@@ -61,6 +61,7 @@ public class LedgerManager {
             entry.put("balance", getAccountBalance(account.getId()));
             if (account.getResourceType() != null) {
                 entry.put("resourceTypeName", account.getResourceType().getName());
+                entry.put("resourceTypeKind", account.getResourceType().getKind().name());
             }
             result.add(entry);
         }

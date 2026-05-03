@@ -438,12 +438,25 @@ function openReportModal() {
 
 // Change 2: Ledger filter toggle
 function loadLedger() {
-    var entryFilter = document.getElementById("ledger-filter") ?
+    var filter = document.getElementById("ledger-filter") ?
         document.getElementById("ledger-filter").value : "ALL";
 
     api("GET", "/api/accounts").then(function(accounts) {
+
+        // Filter accounts based on selection
+        var filtered = accounts;
+        if (filter === "CONSUMABLE") {
+            filtered = accounts.filter(function(a) {
+                return a.resourceTypeKind === "CONSUMABLE" || a.kind === "USAGE";
+            });
+        } else if (filter === "ASSET") {
+            filtered = accounts.filter(function(a) {
+                return a.resourceTypeKind === "ASSET";
+            });
+        }
+
         document.getElementById("accounts-table").innerHTML =
-            accounts.map(function(a) {
+            filtered.map(function(a) {
                 var safeName = a.name.replace(/'/g, "\\'");
                 return "<tr><td>" + a.id + "</td><td>" + a.name + "</td><td>" + a.kind + "</td>" +
                     "<td>" + (a.resourceTypeName || "-") + "</td>" +
@@ -451,7 +464,7 @@ function loadLedger() {
                     "<td><button class='btn btn-secondary btn-sm' onclick=\"loadEntries(" + a.id + ", '" + safeName + "')\">Entries</button></td></tr>";
             }).join("") || '<tr><td colspan="6" class="empty-state">No accounts</td></tr>';
 
-        // Posting rule dropdowns
+        // Populate posting rule dropdowns (always use all accounts)
         var poolAccounts = accounts.filter(function(a) { return a.kind === "POOL"; });
         var alertAccounts = accounts.filter(function(a) { return a.kind === "ALERT_MEMO"; });
         var triggerSelect = document.getElementById("rule-trigger");
