@@ -3,18 +3,16 @@ package com.pm.resourceplanningledger.domain.state;
 import org.springframework.stereotype.Component;
 
 @Component
-public class ProposedState implements ActionState {
+public class PendingApprovalState implements ActionState {
 
     @Override
     public void implement(ActionContext ctx) {
-        // Week 2: direct PROPOSED → IN_PROGRESS removed. Must go through PENDING_APPROVAL.
         throw new IllegalStateTransitionException(name(), "implement");
     }
 
     @Override
     public void suspend(ActionContext ctx, String reason) {
-        ctx.transitionTo(new SuspendedState());
-        ctx.getActionManager().onSuspend(ctx.getProposedAction(), reason);
+        throw new IllegalStateTransitionException(name(), "suspend");
     }
 
     @Override
@@ -29,23 +27,24 @@ public class ProposedState implements ActionState {
 
     @Override
     public void abandon(ActionContext ctx) {
-        ctx.transitionTo(new AbandonedState());
+        throw new IllegalStateTransitionException(name(), "abandon");
     }
 
     @Override
     public void submitForApproval(ActionContext ctx) {
-        ctx.transitionTo(new PendingApprovalState());
-        ctx.getActionManager().onSubmitForApproval(ctx.getProposedAction());
+        throw new IllegalStateTransitionException(name(), "submitForApproval");
     }
 
     @Override
     public void approve(ActionContext ctx) {
-        throw new IllegalStateTransitionException(name(), "approve");
+        ctx.transitionTo(new InProgressState());
+        ctx.getActionManager().onApprove(ctx.getProposedAction());
     }
 
     @Override
     public void reject(ActionContext ctx) {
-        throw new IllegalStateTransitionException(name(), "reject");
+        ctx.transitionTo(new ProposedState());
+        ctx.getActionManager().onReject(ctx.getProposedAction());
     }
 
     @Override
@@ -55,6 +54,6 @@ public class ProposedState implements ActionState {
 
     @Override
     public String name() {
-        return "PROPOSED";
+        return "PENDING_APPROVAL";
     }
 }

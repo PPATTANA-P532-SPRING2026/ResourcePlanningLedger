@@ -3,6 +3,7 @@ package com.pm.resourceplanningledger.domain.operational;
 import com.pm.resourceplanningledger.domain.knowledge.Protocol;
 import com.pm.resourceplanningledger.domain.knowledge.ResourceType;
 import jakarta.persistence.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -51,6 +52,7 @@ public class Plan implements PlanNode {
     @Override
     public boolean isLeaf() { return false; }
 
+
     @Override
     public String getStatus() {
         List<PlanNode> children = getChildren();
@@ -78,6 +80,7 @@ public class Plan implements PlanNode {
         return "PROPOSED";
     }
 
+
     @Override
     public BigDecimal getTotalAllocatedQuantity(ResourceType resourceType) {
         BigDecimal total = BigDecimal.ZERO;
@@ -87,10 +90,15 @@ public class Plan implements PlanNode {
         return total;
     }
 
+
     @Override
     public void accept(PlanNodeVisitor visitor) {
-        visitor.visitPlan(this);
+        visitor.visitComposite(this);
+        for (PlanNode child : getChildren()) {
+            child.accept(visitor);
+        }
     }
+
 
     public List<PlanNode> getChildren() {
         List<PlanNode> children = new ArrayList<>();

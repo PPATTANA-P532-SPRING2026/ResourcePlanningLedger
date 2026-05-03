@@ -6,5 +6,9 @@ public interface ActionState {
     void resume(ActionContext ctx);
     void complete(ActionContext ctx);
     void abandon(ActionContext ctx);
+    void submitForApproval(ActionContext ctx);
+    void approve(ActionContext ctx);
+    void reject(ActionContext ctx);
+    void reopen(ActionContext ctx);
     String name();
 }

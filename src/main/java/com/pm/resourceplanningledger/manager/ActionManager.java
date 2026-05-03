@@ -9,8 +9,10 @@ import com.pm.resourceplanningledger.domain.operational.*;
 import com.pm.resourceplanningledger.domain.state.ActionContext;
 import com.pm.resourceplanningledger.domain.state.ActionState;
 import com.pm.resourceplanningledger.domain.state.ActionStateMachine;
+import com.pm.resourceplanningledger.engine.AssetLedgerEntryGenerator;
 import com.pm.resourceplanningledger.engine.ConsumableLedgerEntryGenerator;
 import com.pm.resourceplanningledger.engine.PostingRuleEngine;
+import com.pm.resourceplanningledger.engine.ReversalLedgerEntryGenerator;
 import com.pm.resourceplanningledger.resourceaccess.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,8 @@ public class ActionManager {
     private final AuditLogRepository auditLogRepository;
     private final ActionStateMachine stateMachine;
     private final ConsumableLedgerEntryGenerator consumableLedgerEntryGenerator;
+    private final AssetLedgerEntryGenerator assetLedgerEntryGenerator;
+    private final ReversalLedgerEntryGenerator reversalLedgerEntryGenerator;
     private final PostingRuleEngine postingRuleEngine;
     private final Clock clock;
 
@@ -47,6 +51,8 @@ public class ActionManager {
                          AuditLogRepository auditLogRepository,
                          ActionStateMachine stateMachine,
                          ConsumableLedgerEntryGenerator consumableLedgerEntryGenerator,
+                         AssetLedgerEntryGenerator assetLedgerEntryGenerator,
+                         ReversalLedgerEntryGenerator reversalLedgerEntryGenerator,
                          PostingRuleEngine postingRuleEngine,
                          Clock clock) {
         this.proposedActionRepository = proposedActionRepository;
@@ -59,6 +65,8 @@ public class ActionManager {
         this.auditLogRepository = auditLogRepository;
         this.stateMachine = stateMachine;
         this.consumableLedgerEntryGenerator = consumableLedgerEntryGenerator;
+        this.assetLedgerEntryGenerator = assetLedgerEntryGenerator;
+        this.reversalLedgerEntryGenerator = reversalLedgerEntryGenerator;
         this.postingRuleEngine = postingRuleEngine;
         this.clock = clock;
     }
@@ -69,6 +77,56 @@ public class ActionManager {
     }
 
     @Transactional
+    public ProposedAction submitForApproval(Long actionId) {
+        ProposedAction action = findById(actionId);
+        checkDependenciesSatisfied(action);
+        ActionState currentState = stateMachine.resolve(action.getStateName());
+        ActionContext ctx = new ActionContext(action, this);
+        currentState.submitForApproval(ctx);
+        return proposedActionRepository.save(action);
+    }
+
+    @Transactional
+    public ProposedAction approve(Long actionId, String actualParty, String actualLocation) {
+        ProposedAction action = findById(actionId);
+        ActionState currentState = stateMachine.resolve(action.getStateName());
+        ActionContext ctx = new ActionContext(action, this);
+        currentState.approve(ctx);
+
+        // Update implemented action with actual values if provided
+        ImplementedAction impl = action.getImplementedAction();
+        if (impl != null) {
+            if (actualParty != null && !actualParty.isEmpty()) {
+                impl.setActualParty(actualParty);
+            }
+            if (actualLocation != null && !actualLocation.isEmpty()) {
+                impl.setActualLocation(actualLocation);
+            }
+            implementedActionRepository.save(impl);
+        }
+
+        return proposedActionRepository.save(action);
+    }
+
+    @Transactional
+    public ProposedAction reject(Long actionId) {
+        ProposedAction action = findById(actionId);
+        ActionState currentState = stateMachine.resolve(action.getStateName());
+        ActionContext ctx = new ActionContext(action, this);
+        currentState.reject(ctx);
+        return proposedActionRepository.save(action);
+    }
+
+    @Transactional
+    public ProposedAction reopen(Long actionId) {
+        ProposedAction action = findById(actionId);
+        ActionState currentState = stateMachine.resolve(action.getStateName());
+        ActionContext ctx = new ActionContext(action, this);
+        currentState.reopen(ctx);
+        return proposedActionRepository.save(action);
+    }
+
+    @Transactional
     public ProposedAction implement(Long actionId, String actualParty, String actualLocation) {
         ProposedAction action = findById(actionId);
         checkDependenciesSatisfied(action);
@@ -76,7 +134,6 @@ public class ActionManager {
         ActionContext ctx = new ActionContext(action, this);
         currentState.implement(ctx);
 
-        // After state transition, update the ImplementedAction with actual values if provided
         ImplementedAction impl = action.getImplementedAction();
         if (impl != null) {
             if (actualParty != null && !actualParty.isEmpty()) {
@@ -93,14 +150,9 @@ public class ActionManager {
 
     private void checkDependenciesSatisfied(ProposedAction action) {
         List<String> deps = action.getDependsOn();
-        if (deps == null || deps.isEmpty()) {
-            return;
-        }
-
+        if (deps == null || deps.isEmpty()) return;
         Plan plan = action.getPlan();
-        if (plan == null) {
-            return;
-        }
+        if (plan == null) return;
 
         for (String depName : deps) {
             boolean found = false;
@@ -109,7 +161,7 @@ public class ActionManager {
                     found = true;
                     if (!"COMPLETED".equals(sibling.getStateName())) {
                         throw new IllegalStateException(
-                                "Cannot implement '" + action.getName() +
+                                "Cannot proceed with '" + action.getName() +
                                         "': dependency '" + depName + "' is not completed (current state: " +
                                         sibling.getStateName() + ")");
                     }
@@ -118,7 +170,7 @@ public class ActionManager {
             }
             if (!found) {
                 throw new IllegalStateException(
-                        "Cannot implement '" + action.getName() +
+                        "Cannot proceed with '" + action.getName() +
                                 "': dependency '" + depName + "' not found in plan");
             }
         }
@@ -160,13 +212,80 @@ public class ActionManager {
         return proposedActionRepository.save(action);
     }
 
-    // Called by state objects via ActionContext
+    // --- Callbacks from state objects ---
+
+    public void onSubmitForApproval(ProposedAction action) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        auditLogRepository.save(new AuditLogEntry(
+                "ACTION_SUBMITTED_FOR_APPROVAL", null, null, action.getId(), now));
+    }
+
+    public void onApprove(ProposedAction action) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        ImplementedAction impl = new ImplementedAction(action, now);
+        impl.setActualParty(action.getParty());
+        impl.setActualLocation(action.getLocation());
+        implementedActionRepository.save(impl);
+        action.setImplementedAction(impl);
+
+        auditLogRepository.save(new AuditLogEntry(
+                "ACTION_APPROVED", null, null, action.getId(), now));
+    }
+
+    public void onReject(ProposedAction action) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        auditLogRepository.save(new AuditLogEntry(
+                "ACTION_REJECTED", null, null, action.getId(), now));
+    }
+
+    public void onReopen(ProposedAction action) {
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        // Generate reversal entries to restore pool balance
+        ImplementedAction impl = implementedActionRepository.findByProposedActionId(action.getId())
+                .orElse(null);
+        if (impl != null && !action.getAllocations().isEmpty()) {
+            Transaction tx = reversalLedgerEntryGenerator.generateEntries(impl);
+
+            for (Entry entry : tx.getEntries()) {
+                entry.setActionId(action.getId());
+                if (entry.getAccount() == null) {
+                    Account usageAccount = accountRepository.findByName("Usage - " + action.getName());
+                    if (usageAccount == null) {
+                        usageAccount = new Account("Usage - " + action.getName(), Account.AccountKind.USAGE);
+                        usageAccount = accountRepository.save(usageAccount);
+                    }
+                    entry.setAccount(usageAccount);
+                }
+            }
+
+            tx = transactionRepository.save(tx);
+            postingRuleEngine.evaluate(tx);
+            transactionRepository.save(tx);
+
+            for (Entry entry : tx.getEntries()) {
+                auditLogRepository.save(new AuditLogEntry(
+                        "REVERSAL_ENTRY_CREATED",
+                        entry.getAccount().getId(),
+                        entry.getId(),
+                        action.getId(),
+                        now
+                ));
+            }
+
+            impl.setStatus("REOPENED");
+            implementedActionRepository.save(impl);
+        }
+
+        auditLogRepository.save(new AuditLogEntry(
+                "ACTION_REOPENED", null, null, action.getId(), now));
+    }
 
     public void onImplement(ProposedAction action) {
         LocalDateTime now = LocalDateTime.now(clock);
         ImplementedAction impl = new ImplementedAction(action, now);
-        impl.setActualParty(null);
-        impl.setActualLocation(null);
+        impl.setActualParty(action.getParty());
+        impl.setActualLocation(action.getLocation());
         implementedActionRepository.save(impl);
         action.setImplementedAction(impl);
 
@@ -178,7 +297,6 @@ public class ActionManager {
         LocalDateTime now = LocalDateTime.now(clock);
         Suspension suspension = new Suspension(action, reason, LocalDate.now(clock));
         suspensionRepository.save(suspension);
-
         auditLogRepository.save(new AuditLogEntry(
                 "ACTION_SUSPENDED", null, null, action.getId(), now));
     }
@@ -192,7 +310,6 @@ public class ActionManager {
                 suspensionRepository.save(s);
             }
         }
-
         auditLogRepository.save(new AuditLogEntry(
                 "ACTION_RESUMED", null, null, action.getId(), now));
     }
@@ -206,44 +323,48 @@ public class ActionManager {
             impl.setStatus("COMPLETED");
             implementedActionRepository.save(impl);
 
-            // Generate ledger entries using Template Method
             if (!action.getAllocations().isEmpty()) {
-                Transaction tx = consumableLedgerEntryGenerator.generateEntries(impl);
+                // Change 2: call BOTH generators in sequence
+                Transaction consumableTx = consumableLedgerEntryGenerator.generateEntries(impl);
+                processTransaction(consumableTx, action, now);
 
-                // Set usage accounts and actionId for all entries
-                for (Entry entry : tx.getEntries()) {
-                    entry.setActionId(action.getId());
-                    if (entry.getAccount() == null) {
-                        Account usageAccount = new Account(
-                                "Usage - " + action.getName(),
-                                Account.AccountKind.USAGE
-                        );
-                        usageAccount = accountRepository.save(usageAccount);
-                        entry.setAccount(usageAccount);
-                    }
-                }
-
-                tx = transactionRepository.save(tx);
-
-                // Evaluate posting rules (over-consumption alert)
-                postingRuleEngine.evaluate(tx);
-                transactionRepository.save(tx);
-
-                // Audit log for each entry
-                for (Entry entry : tx.getEntries()) {
-                    auditLogRepository.save(new AuditLogEntry(
-                            "LEDGER_ENTRY_CREATED",
-                            entry.getAccount().getId(),
-                            entry.getId(),
-                            action.getId(),
-                            now
-                    ));
-                }
+                Transaction assetTx = assetLedgerEntryGenerator.generateEntries(impl);
+                processTransaction(assetTx, action, now);
             }
         }
 
         auditLogRepository.save(new AuditLogEntry(
                 "ACTION_COMPLETED", null, null, action.getId(), now));
+    }
+
+    private void processTransaction(Transaction tx, ProposedAction action, LocalDateTime now) {
+        if (tx.getEntries().isEmpty()) return;
+
+        for (Entry entry : tx.getEntries()) {
+            entry.setActionId(action.getId());
+            if (entry.getAccount() == null) {
+                Account usageAccount = new Account(
+                        "Usage - " + action.getName(),
+                        Account.AccountKind.USAGE
+                );
+                usageAccount = accountRepository.save(usageAccount);
+                entry.setAccount(usageAccount);
+            }
+        }
+
+        tx = transactionRepository.save(tx);
+        postingRuleEngine.evaluate(tx);
+        transactionRepository.save(tx);
+
+        for (Entry entry : tx.getEntries()) {
+            auditLogRepository.save(new AuditLogEntry(
+                    "LEDGER_ENTRY_CREATED",
+                    entry.getAccount().getId(),
+                    entry.getId(),
+                    action.getId(),
+                    now
+            ));
+        }
     }
 
     @Transactional
@@ -269,12 +390,8 @@ public class ActionManager {
         ImplementedAction impl = implementedActionRepository.findByProposedActionId(actionId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Action " + actionId + " has not been implemented yet"));
-        if (actualParty != null) {
-            impl.setActualParty(actualParty);
-        }
-        if (actualLocation != null) {
-            impl.setActualLocation(actualLocation);
-        }
+        if (actualParty != null) impl.setActualParty(actualParty);
+        if (actualLocation != null) impl.setActualLocation(actualLocation);
         implementedActionRepository.save(impl);
         return action;
     }

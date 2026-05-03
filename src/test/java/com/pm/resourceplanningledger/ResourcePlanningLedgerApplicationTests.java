@@ -41,18 +41,15 @@ class ResourcePlanningLedgerApplicationTests {
     // =========================================================================
 
     @Test
-    void implement_proposedState_transitionsToInProgress() {
+    void implement_proposedState_throwsIllegalStateTransition() {
         // Arrange
         ProposedAction action = new ProposedAction("Test Action");
         action.setStateName("PROPOSED");
         ActionContext ctx = new ActionContext(action, actionManager);
         ProposedState state = new ProposedState();
 
-        // Act
-        state.implement(ctx);
-
-        // Assert
-        assertEquals("IN_PROGRESS", action.getStateName());
+        // Act & Assert
+        assertThrows(IllegalStateTransitionException.class, () -> state.implement(ctx));
     }
 
     @Test
@@ -507,8 +504,16 @@ class ResourcePlanningLedgerApplicationTests {
     void actionStateMachine_resolvesValidStates() {
         // Arrange
         ActionStateMachine machine = new ActionStateMachine(
-                new ProposedState(), new SuspendedState(), new InProgressState(),
-                new CompletedState(), new AbandonedState());
+                new ProposedState(),
+
+                new SuspendedState(),
+                new InProgressState(),
+                new CompletedState(),
+                new AbandonedState(),
+                new PendingApprovalState(),
+                new ReopenedState()
+
+        );
 
         // Act & Assert
         assertEquals("PROPOSED", machine.resolve("PROPOSED").name());
@@ -522,8 +527,16 @@ class ResourcePlanningLedgerApplicationTests {
     void actionStateMachine_unknownState_throws() {
         // Arrange
         ActionStateMachine machine = new ActionStateMachine(
-                new ProposedState(), new SuspendedState(), new InProgressState(),
-                new CompletedState(), new AbandonedState());
+                new ProposedState(),
+
+                new SuspendedState(),
+                new InProgressState(),
+                new CompletedState(),
+                new AbandonedState(),
+                new PendingApprovalState(),
+                new ReopenedState()
+
+        );
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> machine.resolve("UNKNOWN"));

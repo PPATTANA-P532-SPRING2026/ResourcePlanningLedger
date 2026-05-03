@@ -7,9 +7,6 @@ on:
     branches: [ main ]
 
 jobs:
-  # ============================================================
-  # Job 1: Run unit tests with PostgreSQL service container
-  # ============================================================
   test:
     runs-on: ubuntu-latest
     services:
@@ -42,9 +39,6 @@ jobs:
           name: surefire-report
           path: target/surefire-reports/
 
-  # ============================================================
-  # Job 2: Build JAR and Docker image
-  # ============================================================
   build:
     needs: test
     runs-on: ubuntu-latest
@@ -57,21 +51,23 @@ jobs:
       - run: mvn -q package -DskipTests
       - run: docker build -t rpl .
 
-  # ============================================================
-  # Job 3: Deploy backend to Render (main branch only)
-  # ============================================================
-  deploy-backend:
+  deploy-backend-production:
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Render deploy
+      - name: Trigger Render production deploy
         run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
 
-  # ============================================================
-  # Job 4: Deploy frontend to GitHub Pages (main branch only)
-  # ============================================================
-  deploy-frontend:
+  deploy-backend-week2:
+    needs: build
+    if: github.ref == 'refs/heads/week-2-changes'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render week2 deploy
+        run: curl -X POST ${{ secrets.RENDER_WEEK2_DEPLOY_HOOK }}
+
+  deploy-frontend-production:
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -88,15 +84,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Replace the API placeholder in app.js with the actual Render URL
-      - name: Inject backend API URL
+      - name: Inject production backend API URL
         run: |
-          sed -i "s|const API = '.*';|const API = '${{ secrets.RENDER_BACKEND_URL }}';|" src/main/resources/static/js/app.js
+          sed -i 's|var API = ".*";|var API = "${{ secrets.RENDER_BACKEND_URL }}";|' src/main/resources/static/js/app.js
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v4
 
-      # Upload only the static/ folder (index.html, css/, js/)
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -104,4 +98,37 @@ jobs:
 
       - name: Deploy to GitHub Pages
         id: deployment
+        uses: actions/deploy-pages@v4
+
+  deploy-frontend-week2:
+    needs: build
+    if: github.ref == 'refs/heads/week-2-changes'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages-week2
+      url: ${{ steps.deployment-week2.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inject week2 backend API URL
+        run: |
+          sed -i 's|var API = ".*";|var API = "${{ secrets.RENDER_WEEK2_BACKEND_URL }}";|' src/main/resources/static/js/app.js
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: src/main/resources/static
+
+      - name: Deploy to GitHub Pages
+        id: deployment-week2
         uses: actions/deploy-pages@v4

@@ -13,13 +13,17 @@ public class ActionStateMachine {
             SuspendedState suspendedState,
             InProgressState inProgressState,
             CompletedState completedState,
-            AbandonedState abandonedState) {
+            AbandonedState abandonedState,
+            PendingApprovalState pendingApprovalState,
+            ReopenedState reopenedState) {
         this.states = Map.of(
                 "PROPOSED", proposedState,
                 "SUSPENDED", suspendedState,
                 "IN_PROGRESS", inProgressState,
                 "COMPLETED", completedState,
-                "ABANDONED", abandonedState
+                "ABANDONED", abandonedState,
+                "PENDING_APPROVAL", pendingApprovalState,
+                "REOPENED", reopenedState
         );
     }
 

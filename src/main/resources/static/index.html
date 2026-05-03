@@ -109,10 +109,26 @@
                 <h2>Plan Detail: <span id="plan-detail-name"></span>
                     <span id="plan-detail-status" class="status" style="margin-left:8px;"></span>
                 </h2>
-                <div class="btn-group" style="margin-bottom:12px;">
+
+                <!-- Change 4: Metrics Panel -->
+                <div id="metrics-panel" style="background:#f8f9fa; padding:16px; border-radius:6px; margin-bottom:12px;"></div>
+
+                <!-- Change 3: Report filter + buttons -->
+                <div class="btn-group" style="margin-bottom:12px; align-items:center;">
                     <button class="btn btn-secondary btn-sm" onclick="openAddActionModal()">+ Add Action</button>
+                    <select id="report-status-filter" style="padding:5px 8px; border:1px solid #ddd; border-radius:4px; font-size:12px;">
+                        <option value="">All statuses</option>
+                        <option value="PROPOSED">PROPOSED</option>
+                        <option value="PENDING_APPROVAL">PENDING APPROVAL</option>
+                        <option value="IN_PROGRESS">IN PROGRESS</option>
+                        <option value="COMPLETED">COMPLETED</option>
+                        <option value="SUSPENDED">SUSPENDED</option>
+                        <option value="ABANDONED">ABANDONED</option>
+                        <option value="REOPENED">REOPENED</option>
+                    </select>
                     <button class="btn btn-secondary btn-sm" onclick="openReportModal()">View Report</button>
                 </div>
+
                 <div id="plan-tree"></div>
             </div>
         </div>
@@ -121,13 +137,23 @@
     <!-- ===== LEDGER PAGE ===== -->
     <div id="page-ledger" class="page">
         <h2 style="margin: 16px 0;">Ledger</h2>
+
+        <!-- Change 2: Entry filter toggle -->
         <div class="card">
             <h2>Accounts</h2>
+            <div style="margin-bottom:12px;">
+                <select id="ledger-filter" onchange="loadLedger()" style="padding:6px 10px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
+                    <option value="ALL">Show all entries</option>
+                    <option value="CONSUMABLE">Show consumable entries</option>
+                    <option value="ASSET">Show asset entries</option>
+                </select>
+            </div>
             <table>
                 <thead><tr><th>ID</th><th>Name</th><th>Kind</th><th>Resource</th><th>Balance</th><th></th></tr></thead>
                 <tbody id="accounts-table"></tbody>
             </table>
         </div>
+
         <div id="entries-section" style="display:none;" class="card">
             <h2>Entries for: <span id="entries-account-name"></span></h2>
             <table>
@@ -135,11 +161,13 @@
                 <tbody id="entries-table"></tbody>
             </table>
         </div>
+
         <div class="card">
             <h2>Posting Rules</h2>
+
             <!-- Add Posting Rule Form -->
-            <div class="card">
-                <h2>Add Posting Rule</h2>
+            <div style="background:#f8f9fa; padding:16px; border-radius:6px; margin-bottom:16px;">
+                <h3 style="margin-bottom:12px;">Add Posting Rule</h3>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Trigger Account (Pool)</label>
@@ -155,6 +183,7 @@
                     </div>
                 </div>
             </div>
+
             <table>
                 <thead><tr><th>Trigger Account</th><th>Output Account</th><th>Strategy</th></tr></thead>
                 <tbody id="posting-rules-table"></tbody>
@@ -204,7 +233,7 @@
 
 <!-- Report Modal -->
 <div id="report-modal" class="modal-overlay">
-    <div class="modal" style="min-width:500px;">
+    <div class="modal" style="min-width:600px;">
         <h2>Depth-First Plan Report</h2>
         <div id="report-content"></div>
         <div class="modal-actions">
@@ -213,11 +242,11 @@
     </div>
 </div>
 
-<!-- Implement Modal (F5: actual party/location) -->
+<!-- Implement / Approve Modal (F5 + Change 1) -->
 <div id="implement-modal" class="modal-overlay">
     <div class="modal">
-        <h2>Implement Action</h2>
-        <p style="margin-bottom:12px; color:#666;">Enter the actual party and location. These may differ from the proposed values.</p>
+        <h2>Approve Action</h2>
+        <p style="margin-bottom:12px; color:#666;">Enter the actual party and location. Leave blank to keep proposed values.</p>
         <div class="form-row">
             <div class="form-group">
                 <label>Proposed Party</label>
@@ -225,7 +254,7 @@
             </div>
             <div class="form-group">
                 <label>Actual Party</label>
-                <input id="impl-actual-party" placeholder="Who actually did it?">
+                <input id="impl-actual-party" placeholder="Leave blank to keep proposed">
             </div>
         </div>
         <div class="form-row">
@@ -235,12 +264,12 @@
             </div>
             <div class="form-group">
                 <label>Actual Location</label>
-                <input id="impl-actual-location" placeholder="Where did it actually happen?">
+                <input id="impl-actual-location" placeholder="Leave blank to keep proposed">
             </div>
         </div>
         <div class="modal-actions">
             <button class="btn btn-secondary" onclick="closeModal('implement-modal')">Cancel</button>
-            <button class="btn btn-primary" onclick="confirmImplement()">Implement</button>
+            <button class="btn btn-success" onclick="confirmImplement()">Approve</button>
         </div>
     </div>
 </div>
@@ -270,7 +299,10 @@
             </select>
         </div>
         <div class="form-group"><label>Asset ID (if specific)</label><input id="alloc-asset" placeholder="Optional"></div>
-        <div class="form-group"><label>Time Period</label><input id="alloc-time" placeholder="Optional"></div>
+        <div class="form-group">
+            <label>Time Period (hours, required for SPECIFIC ASSET)</label>
+            <input id="alloc-time" placeholder="e.g. 8 (hours)">
+        </div>
         <div class="modal-actions">
             <button class="btn btn-secondary" onclick="closeModal('alloc-modal')">Cancel</button>
             <button class="btn btn-primary" onclick="confirmAllocation()">Add</button>

@@ -78,7 +78,7 @@ public class ProposedAction implements PlanNode {
 
     @Override
     public void accept(PlanNodeVisitor visitor) {
-        visitor.visitAction(this);
+        visitor.visitLeaf(this);
     }
 
     public void addAllocation(ResourceAllocation allocation) {

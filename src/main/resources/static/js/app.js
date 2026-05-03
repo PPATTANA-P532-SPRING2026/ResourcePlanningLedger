@@ -39,15 +39,12 @@ function api(method, path, body) {
 function loadDashboard() {
     api("GET", "/api/accounts").then(function(accounts) {
         var poolAccounts = accounts.filter(function(a) { return a.kind === "POOL"; });
-
         var alertSection = document.getElementById("alert-section");
         var belowZero = poolAccounts.filter(function(a) { return parseFloat(a.balance) < 0; });
         if (belowZero.length > 0) {
             alertSection.innerHTML = '<div class="alert-banner"><strong>Warning: Over-consumption Alert</strong>' +
                 belowZero.map(function(a) { return a.name + ": " + a.balance; }).join(", ") + "</div>";
-        } else {
-            alertSection.innerHTML = "";
-        }
+        } else { alertSection.innerHTML = ""; }
 
         document.getElementById("pool-balances").innerHTML =
             poolAccounts.map(function(a) {
@@ -62,7 +59,6 @@ function loadDashboard() {
                 return "<tr><td>" + p.name + '</td><td><span class="status status-' + p.status + '">' + p.status + "</span></td>" +
                     "<td>" + p.actionCount + " actions, " + p.subPlanCount + " sub-plans</td></tr>";
             }).join("") || '<tr><td colspan="3" class="empty-state">No plans yet</td></tr>';
-
         return api("GET", "/api/resource-types");
     }).then(function(rts) {
         document.getElementById("resource-types-table").innerHTML =
@@ -106,8 +102,7 @@ function createProtocol() {
         var sName = document.getElementById("step-name-" + i);
         if (sName && sName.value) {
             var deps = document.getElementById("step-deps-" + i).value;
-            steps.push({
-                name: sName.value,
+            steps.push({ name: sName.value,
                 dependsOn: deps ? deps.split(",").map(function(s) { return s.trim(); }).filter(function(s) { return s; }) : []
             });
         }
@@ -133,7 +128,6 @@ function loadProtocols() {
                         return s.name + (s.dependsOn && s.dependsOn.length ? " depends on: " + s.dependsOn.join(", ") : "");
                     }).join(" | ") || "none") + "</div></div>";
             }).join("") || '<div class="empty-state">No protocols yet</div>';
-
         var select = document.getElementById("plan-protocol");
         if (select) {
             select.innerHTML = '<option value="">-- From scratch --</option>' +
@@ -177,6 +171,25 @@ function loadPlanDetail(planId) {
         statusEl.className = "status status-" + plan.status;
         document.getElementById("plan-detail-section").style.display = "block";
         document.getElementById("plan-tree").innerHTML = renderTree(plan.children, 0);
+        loadMetrics(planId);
+    });
+}
+
+// Change 4: Load and display metrics panel
+function loadMetrics(planId) {
+    api("GET", "/api/plans/" + planId + "/metrics").then(function(metrics) {
+        var pct = Math.round(metrics.completionRatio * 100);
+        document.getElementById("metrics-panel").innerHTML =
+            '<div style="display:flex; gap:24px; flex-wrap:wrap;">' +
+            '<div style="text-align:center;"><div style="font-size:28px; font-weight:700; color:#2e7d32;">' + pct + '%</div>' +
+            '<div style="font-size:12px; color:#666;">Completion (' + metrics.completedLeaves + '/' + metrics.totalLeaves + ')</div></div>' +
+            '<div style="text-align:center;"><div style="font-size:28px; font-weight:700; color:#1565c0;">$' + (metrics.totalCost || "0") + '</div>' +
+            '<div style="font-size:12px; color:#666;">Resource Cost</div></div>' +
+            '<div style="text-align:center;"><div style="font-size:28px; font-weight:700; color:' + (metrics.riskScore > 0 ? '#c62828' : '#666') + ';">' + metrics.riskScore + '</div>' +
+            '<div style="font-size:12px; color:#666;">Risk Score</div></div>' +
+            '</div>';
+    }).catch(function() {
+        document.getElementById("metrics-panel").innerHTML = "";
     });
 }
 
@@ -226,9 +239,16 @@ function loadActionDetail(actionId) {
         var html = '<p><strong>State:</strong> <span class="status status-' + action.state + '">' + action.state + "</span></p>";
         html += "<p><strong>Party:</strong> " + (action.party || "-") + " | <strong>Location:</strong> " + (action.location || "-") + "</p>";
 
+        // Change 1: new transition buttons
         html += '<div class="btn-group">';
-        if (action.legalTransitions.indexOf("implement") !== -1) {
-            html += '<button class="btn btn-primary btn-sm" onclick="openImplementModal(' + actionId + ', \'' + (action.party || '') + '\', \'' + (action.location || '') + '\')">Implement</button>';
+        if (action.legalTransitions.indexOf("submitForApproval") !== -1) {
+            html += '<button class="btn btn-primary btn-sm" onclick="doTransition(' + actionId + ", 'submit-for-approval'" + ')">Submit for Approval</button>';
+        }
+        if (action.legalTransitions.indexOf("approve") !== -1) {
+            html += '<button class="btn btn-success btn-sm" onclick="openImplementModal(' + actionId + ", '" + (action.party || "") + "', '" + (action.location || "") + "'" + ')">Approve</button>';
+        }
+        if (action.legalTransitions.indexOf("reject") !== -1) {
+            html += '<button class="btn btn-danger btn-sm" onclick="doTransition(' + actionId + ", 'reject'" + ')">Reject</button>';
         }
         if (action.legalTransitions.indexOf("complete") !== -1) {
             html += '<button class="btn btn-success btn-sm" onclick="doTransition(' + actionId + ", 'complete'" + ')">Complete</button>';
@@ -242,10 +262,13 @@ function loadActionDetail(actionId) {
         if (action.legalTransitions.indexOf("abandon") !== -1) {
             html += '<button class="btn btn-danger btn-sm" onclick="doTransition(' + actionId + ", 'abandon'" + ')">Abandon</button>';
         }
+        if (action.legalTransitions.indexOf("reopen") !== -1) {
+            html += '<button class="btn btn-warning btn-sm" onclick="doTransition(' + actionId + ", 'reopen'" + ')">Reopen</button>';
+        }
         html += '<button class="btn btn-secondary btn-sm" onclick="openAllocModal(' + actionId + ')">+ Allocation</button>';
         html += "</div>";
 
-        // F6: Allocations with assetId and timePeriod
+        // F6: Allocations
         if (action.allocations.length > 0) {
             html += "<h3>Resource Allocations</h3>";
             html += "<table><thead><tr><th>Resource</th><th>Qty</th><th>Kind</th><th>Asset ID</th><th>Time Period</th></tr></thead><tbody>";
@@ -256,7 +279,7 @@ function loadActionDetail(actionId) {
             html += "</tbody></table>";
         }
 
-        // F5: Implemented action diff
+        // F5: Diff
         if (action.implementedAction) {
             var impl = action.implementedAction;
             html += "<h3>Implementation Details (Plan vs Reality)</h3>";
@@ -266,7 +289,6 @@ function loadActionDetail(actionId) {
             html += "<tr><td>Start</td><td>-</td><td>" + (impl.actualStart || "-") + "</td></tr>";
             html += "<tr><td>Status</td><td>" + action.state + "</td><td>" + impl.status + "</td></tr>";
             html += "</tbody></table>";
-
             if (impl.diff && Object.keys(impl.diff).length > 0) {
                 html += '<p style="color:#c62828; font-weight:600; margin-top:8px;">Differences detected:</p>';
                 var diffKeys = Object.keys(impl.diff);
@@ -311,6 +333,28 @@ function confirmSuspend() {
     var reason = document.getElementById("suspend-reason").value || "No reason given";
     api("POST", "/api/actions/" + currentActionId + "/suspend", { reason: reason }).then(function() {
         closeModal("suspend-modal");
+        closeModal("action-modal");
+        if (currentPlanId) { loadPlanDetail(currentPlanId); }
+    });
+}
+
+function openImplementModal(actionId, proposedParty, proposedLocation) {
+    currentActionId = actionId;
+    document.getElementById("impl-proposed-party").textContent = proposedParty || "-";
+    document.getElementById("impl-proposed-location").textContent = proposedLocation || "-";
+    document.getElementById("impl-actual-party").value = "";
+    document.getElementById("impl-actual-location").value = "";
+    document.getElementById("implement-modal").classList.add("show");
+}
+
+function confirmImplement() {
+    var actualParty = document.getElementById("impl-actual-party").value;
+    var actualLocation = document.getElementById("impl-actual-location").value;
+    api("POST", "/api/actions/" + currentActionId + "/approve", {
+        actualParty: actualParty || null,
+        actualLocation: actualLocation || null
+    }).then(function() {
+        closeModal("implement-modal");
         closeModal("action-modal");
         if (currentPlanId) { loadPlanDetail(currentPlanId); }
     });
@@ -363,9 +407,14 @@ function addActionToPlan() {
     });
 }
 
-// F10: Report with allocated quantities per resource type
+// Change 3: Report with status filter
 function openReportModal() {
-    api("GET", "/api/plans/" + currentPlanId + "/report").then(function(report) {
+    var statusFilter = document.getElementById("report-status-filter") ?
+        document.getElementById("report-status-filter").value : "";
+    var url = "/api/plans/" + currentPlanId + "/report";
+    if (statusFilter) { url += "?status=" + statusFilter; }
+
+    api("GET", url).then(function(report) {
         var html = "<table><thead><tr><th>Type</th><th>Name</th><th>Status</th><th>Allocated Resources</th></tr></thead><tbody>";
         for (var i = 0; i < report.length; i++) {
             var node = report[i];
@@ -373,9 +422,7 @@ function openReportModal() {
             if (node.allocatedQuantities && Object.keys(node.allocatedQuantities).length > 0) {
                 var parts = [];
                 var keys = Object.keys(node.allocatedQuantities);
-                for (var j = 0; j < keys.length; j++) {
-                    parts.push(keys[j] + ": " + node.allocatedQuantities[keys[j]]);
-                }
+                for (var j = 0; j < keys.length; j++) { parts.push(keys[j] + ": " + node.allocatedQuantities[keys[j]]); }
                 allocStr = parts.join(", ");
             }
             html += "<tr><td><span class='node-type " + (node.type === "ACTION" ? "action" : "plan") + "'>" + node.type + "</span></td>" +
@@ -389,8 +436,11 @@ function openReportModal() {
     });
 }
 
-// F9: Ledger with originating action ID
+// Change 2: Ledger filter toggle
 function loadLedger() {
+    var entryFilter = document.getElementById("ledger-filter") ?
+        document.getElementById("ledger-filter").value : "ALL";
+
     api("GET", "/api/accounts").then(function(accounts) {
         document.getElementById("accounts-table").innerHTML =
             accounts.map(function(a) {
@@ -401,6 +451,22 @@ function loadLedger() {
                     "<td><button class='btn btn-secondary btn-sm' onclick=\"loadEntries(" + a.id + ", '" + safeName + "')\">Entries</button></td></tr>";
             }).join("") || '<tr><td colspan="6" class="empty-state">No accounts</td></tr>';
 
+        // Posting rule dropdowns
+        var poolAccounts = accounts.filter(function(a) { return a.kind === "POOL"; });
+        var alertAccounts = accounts.filter(function(a) { return a.kind === "ALERT_MEMO"; });
+        var triggerSelect = document.getElementById("rule-trigger");
+        var outputSelect = document.getElementById("rule-output");
+        if (triggerSelect) {
+            triggerSelect.innerHTML = poolAccounts.map(function(a) {
+                return '<option value="' + a.id + '">' + a.name + "</option>";
+            }).join("");
+        }
+        if (outputSelect) {
+            outputSelect.innerHTML = alertAccounts.map(function(a) {
+                return '<option value="' + a.id + '">' + a.name + "</option>";
+            }).join("");
+        }
+
         return api("GET", "/api/posting-rules");
     }).then(function(rules) {
         document.getElementById("posting-rules-table").innerHTML =
@@ -410,11 +476,31 @@ function loadLedger() {
     });
 }
 
+function createPostingRule() {
+    var triggerAccountId = parseInt(document.getElementById("rule-trigger").value);
+    var outputAccountId = parseInt(document.getElementById("rule-output").value);
+    if (!triggerAccountId || !outputAccountId) { alert("Select both accounts"); return; }
+    api("POST", "/api/posting-rules", {
+        triggerAccountId: triggerAccountId,
+        outputAccountId: outputAccountId,
+        strategyType: "OVER_CONSUMPTION_ALERT"
+    }).then(function() { loadLedger(); });
+}
+
 function loadEntries(accountId, accountName) {
+    var filter = document.getElementById("ledger-filter") ? document.getElementById("ledger-filter").value : "ALL";
     api("GET", "/api/accounts/" + accountId + "/entries").then(function(entries) {
+        // Change 2: filter entries by type
+        var filtered = entries;
+        if (filter === "CONSUMABLE") {
+            filtered = entries.filter(function(e) { return e.transactionDescription && e.transactionDescription.indexOf("asset") === -1; });
+        } else if (filter === "ASSET") {
+            filtered = entries.filter(function(e) { return e.transactionDescription && e.transactionDescription.indexOf("asset") !== -1; });
+        }
+
         document.getElementById("entries-account-name").textContent = accountName;
         document.getElementById("entries-table").innerHTML =
-            entries.map(function(e) {
+            filtered.map(function(e) {
                 return "<tr><td>" + e.id + '</td><td class="' + (parseFloat(e.amount) < 0 ? "balance-alert" : "") + '">' + e.amount + "</td>" +
                     "<td>" + (e.chargedAt || "-") + "</td>" +
                     "<td>" + (e.bookedAt || "-") + "</td>" +
@@ -438,81 +524,6 @@ function loadAudit() {
 function closeModal(id) {
     document.getElementById(id).classList.remove("show");
 }
-function openImplementModal(actionId, proposedParty, proposedLocation) {
-    currentActionId = actionId;
-
-    document.getElementById("impl-proposed-party").textContent = proposedParty || "-";
-    document.getElementById("impl-proposed-location").textContent = proposedLocation || "-";
-
-    document.getElementById("impl-actual-party").value = "";
-    document.getElementById("impl-actual-location").value = "";
-
-    document.getElementById("implement-modal").classList.add("show");
-}
-
-function confirmImplement() {
-    var actualParty = document.getElementById("impl-actual-party").value;
-    var actualLocation = document.getElementById("impl-actual-location").value;
-
-    api("POST", "/api/actions/" + currentActionId + "/implement", {
-        actualParty: actualParty || null,
-        actualLocation: actualLocation || null
-    }).then(function() {
-        closeModal("implement-modal");
-        closeModal("action-modal");
-
-        if (currentPlanId) {
-            loadPlanDetail(currentPlanId);
-        }
-    });
-}
-
-function loadLedger() {
-    api("GET", "/api/accounts").then(function(accounts) {
-        document.getElementById("accounts-table").innerHTML =
-            accounts.map(function(a) {
-                var safeName = a.name.replace(/'/g, "\\'");
-                return "<tr><td>" + a.id + "</td><td>" + a.name + "</td><td>" + a.kind + "</td>" +
-                    "<td>" + (a.resourceTypeName || "-") + "</td>" +
-                    '<td class="' + (parseFloat(a.balance) < 0 ? "balance-alert" : "balance-ok") + '">' + a.balance + "</td>" +
-                    "<td><button class='btn btn-secondary btn-sm' onclick=\"loadEntries(" + a.id + ", '" + safeName + "')\">Entries</button></td></tr>";
-            }).join("") || '<tr><td colspan="6" class="empty-state">No accounts</td></tr>';
-
-        // Populate posting rule dropdowns
-        var poolAccounts = accounts.filter(function(a) { return a.kind === "POOL"; });
-        var alertAccounts = accounts.filter(function(a) { return a.kind === "ALERT_MEMO"; });
-
-        document.getElementById("rule-trigger").innerHTML =
-            poolAccounts.map(function(a) {
-                return '<option value="' + a.id + '">' + a.name + '</option>';
-            }).join("");
-
-        document.getElementById("rule-output").innerHTML =
-            alertAccounts.map(function(a) {
-                return '<option value="' + a.id + '">' + a.name + '</option>';
-            }).join("");
-
-        return api("GET", "/api/posting-rules");
-    }).then(function(rules) {
-        document.getElementById("posting-rules-table").innerHTML =
-            rules.map(function(r) {
-                return "<tr><td>" + r.triggerAccountName + "</td><td>" + r.outputAccountName + "</td><td>" + r.strategyType + "</td></tr>";
-            }).join("") || '<tr><td colspan="3" class="empty-state">No posting rules</td></tr>';
-    });
-}
-
-function createPostingRule() {
-    var triggerAccountId = parseInt(document.getElementById("rule-trigger").value);
-    var outputAccountId = parseInt(document.getElementById("rule-output").value);
-    if (!triggerAccountId || !outputAccountId) { alert("Select both accounts"); return; }
-    api("POST", "/api/posting-rules", {
-        triggerAccountId: triggerAccountId,
-        outputAccountId: outputAccountId,
-        strategyType: "OVER_CONSUMPTION_ALERT"
-    }).then(function() {
-        loadLedger();
-    });
-}
 
 var overlays = document.querySelectorAll(".modal-overlay");
 for (var i = 0; i < overlays.length; i++) {
@@ -520,6 +531,5 @@ for (var i = 0; i < overlays.length; i++) {
         if (e.target === this) { this.classList.remove("show"); }
     });
 }
-
 
 loadDashboard();

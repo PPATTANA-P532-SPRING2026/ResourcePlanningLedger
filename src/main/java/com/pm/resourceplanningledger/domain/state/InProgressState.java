@@ -33,6 +33,26 @@ public class InProgressState implements ActionState {
     }
 
     @Override
+    public void submitForApproval(ActionContext ctx) {
+        throw new IllegalStateTransitionException(name(), "submitForApproval");
+    }
+
+    @Override
+    public void approve(ActionContext ctx) {
+        throw new IllegalStateTransitionException(name(), "approve");
+    }
+
+    @Override
+    public void reject(ActionContext ctx) {
+        throw new IllegalStateTransitionException(name(), "reject");
+    }
+
+    @Override
+    public void reopen(ActionContext ctx) {
+        throw new IllegalStateTransitionException(name(), "reopen");
+    }
+
+    @Override
     public String name() {
         return "IN_PROGRESS";
     }

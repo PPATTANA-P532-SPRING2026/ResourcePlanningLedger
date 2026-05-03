@@ -31,6 +31,27 @@ public class CompletedState implements ActionState {
     }
 
     @Override
+    public void submitForApproval(ActionContext ctx) {
+        throw new IllegalStateTransitionException(name(), "submitForApproval");
+    }
+
+    @Override
+    public void approve(ActionContext ctx) {
+        throw new IllegalStateTransitionException(name(), "approve");
+    }
+
+    @Override
+    public void reject(ActionContext ctx) {
+        throw new IllegalStateTransitionException(name(), "reject");
+    }
+
+    @Override
+    public void reopen(ActionContext ctx) {
+        ctx.transitionTo(new ReopenedState());
+        ctx.getActionManager().onReopen(ctx.getProposedAction());
+    }
+
+    @Override
     public String name() {
         return "COMPLETED";
     }
