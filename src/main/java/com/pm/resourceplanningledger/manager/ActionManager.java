@@ -250,11 +250,10 @@ public class ActionManager {
             for (Entry entry : tx.getEntries()) {
                 entry.setActionId(action.getId());
                 if (entry.getAccount() == null) {
-                    Account usageAccount = accountRepository.findByName("Usage - " + action.getName());
-                    if (usageAccount == null) {
-                        usageAccount = new Account("Usage - " + action.getName(), Account.AccountKind.USAGE);
-                        usageAccount = accountRepository.save(usageAccount);
-                    }
+                    Account usageAccount = accountRepository
+                            .findFirstByName("Usage - " + action.getName())
+                            .orElseGet(() -> accountRepository.save(
+                                    new Account("Usage - " + action.getName(), Account.AccountKind.USAGE)));
                     entry.setAccount(usageAccount);
                 }
             }
@@ -343,11 +342,10 @@ public class ActionManager {
         for (Entry entry : tx.getEntries()) {
             entry.setActionId(action.getId());
             if (entry.getAccount() == null) {
-                Account usageAccount = new Account(
-                        "Usage - " + action.getName(),
-                        Account.AccountKind.USAGE
-                );
-                usageAccount = accountRepository.save(usageAccount);
+                Account usageAccount = accountRepository
+                        .findFirstByName("Usage - " + action.getName())
+                        .orElseGet(() -> accountRepository.save(
+                                new Account("Usage - " + action.getName(), Account.AccountKind.USAGE)));
                 entry.setAccount(usageAccount);
             }
         }
